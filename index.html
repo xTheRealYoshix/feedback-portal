@@ -5,9 +5,6 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Feedback Portal</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -15,18 +12,21 @@
   ::selection { background: #1e293b; color: #fff; }
   input:focus, textarea:focus { outline: none; border-color: #1e293b !important; }
   @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
-  @keyframes spin { to { transform: rotate(360deg); } }
   .animate-in { animation: fadeUp 0.45s ease both; }
+  button, input, textarea { font-family: 'DM Sans', sans-serif; }
 </style>
 </head>
 <body>
 <div id="root"></div>
-<script type="text/babel">
-const { useState, useEffect } = React;
+<script type="module">
+import { h, render } from 'https://esm.sh/preact@10.19.3';
+import { useState } from 'https://esm.sh/preact@10.19.3/hooks';
+import htm from 'https://esm.sh/htm@3.1.1';
 
-/* ── Storage ── */
+const html = htm.bind(h);
+
 const DB = {
-get(k, fallback) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : fallback; } catch { return fallback; } },
+get(k, fb) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : fb; } catch { return fb; } },
 set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch(e) { console.error(e); } },
 };
 
@@ -45,441 +45,233 @@ thankYouMessage: “Your feedback has been recorded and will be reviewed by our 
 },
 };
 
-/* ── Tiny Components ── */
 function RatingScale({ value, onChange }) {
 const color = (n) => {
-if (n <= 2) return { active: “#ef4444”, hover: “#fee2e2” };
-if (n <= 4) return { active: “#f97316”, hover: “#ffedd5” };
-if (n <= 6) return { active: “#eab308”, hover: “#fef9c3” };
-if (n <= 8) return { active: “#22c55e”, hover: “#dcfce7” };
-return { active: “#10b981”, hover: “#d1fae5” };
+if (n <= 2) return { active: “#ef4444” };
+if (n <= 4) return { active: “#f97316” };
+if (n <= 6) return { active: “#eab308” };
+if (n <= 8) return { active: “#22c55e” };
+return { active: “#10b981” };
 };
-return (
-<div style={{ display: “flex”, gap: 5, alignItems: “center”, flexWrap: “wrap” }}>
-<span style={{ fontSize: 10, color: “#94a3b8”, minWidth: 30 }}>Worst</span>
-{Array.from({ length: 11 }, (_, i) => {
-const c = color(i); const sel = value === i;
-return (
-<button key={i} onClick={() => onChange(i)} style={{
+return html` <div style=${{ display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap" }}> <span style=${{ fontSize: 10, color: "#94a3b8", minWidth: 30 }}>Worst</span> ${[0,1,2,3,4,5,6,7,8,9,10].map(i => { const c = color(i); const sel = value === i; return html`<button key=${i} onClick=${() => onChange(i)} style=${{
 width: 34, height: 34, borderRadius: 8,
-border: `2px solid ${sel ? c.active : "#e2e8f0"}`,
+border: “2px solid “ + (sel ? c.active : “#e2e8f0”),
 background: sel ? c.active : “#fff”,
 color: sel ? “#fff” : “#64748b”,
 fontWeight: 600, fontSize: 13, cursor: “pointer”,
-transition: “all 0.2s”, fontFamily: “‘DM Sans’,sans-serif”,
+transition: “all 0.2s”,
 transform: sel ? “scale(1.12)” : “scale(1)”,
-boxShadow: sel ? `0 2px 8px ${c.active}44` : “none”,
-}}>{i}</button>
-);
-})}
-<span style={{ fontSize: 10, color: “#94a3b8” }}>Best</span>
-</div>
-);
+boxShadow: sel ? “0 2px 8px “ + c.active + “44” : “none”,
+}}>${i}</button>`; })} <span style=${{ fontSize: 10, color: "#94a3b8" }}>Best</span> </div> `;
 }
 
 function Progress({ step, total }) {
-return (
-<div style={{ display: “flex”, gap: 6, marginBottom: 28 }}>
-{Array.from({ length: total }, (_, i) => (
-<div key={i} style={{ flex: 1, height: 4, borderRadius: 2, background: i <= step ? “#1e293b” : “#e2e8f0”, transition: “background 0.4s” }} />
-))}
-</div>
-);
+return html`<div style=${{ display: "flex", gap: 6, marginBottom: 28 }}> ${Array.from({ length: total }, (_, i) => html`<div key=${i} style=${{ flex: 1, height: 4, borderRadius: 2, background: i <= step ? “#1e293b” : “#e2e8f0”, transition: “background 0.4s” }} />`)}
+
+  </div>`;
 }
 
-function Field({ label, value, onChange, type = “text”, placeholder, error }) {
-return (
-<div style={{ marginBottom: 18 }}>
-<label style={{ display: “block”, fontSize: 13, fontWeight: 600, color: “#334155”, marginBottom: 5 }}>{label}</label>
-<input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
-style={{ width: “100%”, padding: “11px 14px”, borderRadius: 10, border: `1.5px solid ${error ? "#ef4444" : "#e2e8f0"}`, fontSize: 15, fontFamily: “‘DM Sans’,sans-serif”, background: “#f8fafc”, transition: “border 0.2s” }} />
-{error && <span style={{ fontSize: 12, color: “#ef4444”, marginTop: 3, display: “block” }}>{error}</span>}
-</div>
-);
+function Field({ label, value, onInput, type, placeholder, error }) {
+return html`<div style=${{ marginBottom: 18 }}> <label style=${{ display: "block", fontSize: 13, fontWeight: 600, color: "#334155", marginBottom: 5 }}>${label}</label> <input type=${type || "text"} value=${value} onInput=${onInput} placeholder=${placeholder} style=${{ width: "100%", padding: "11px 14px", borderRadius: 10, border: "1.5px solid " + (error ? "#ef4444" : "#e2e8f0"), fontSize: 15, background: "#f8fafc", transition: "border 0.2s" }} /> ${error && html`<span style=${{ fontSize: 12, color: “#ef4444”, marginTop: 3, display: “block” }}>${error}</span>`}
+
+  </div>`;
 }
 
-/* ── Main App ── */
+const card = { background: “#fff”, borderRadius: 16, padding: “28px 22px”, boxShadow: “0 1px 3px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.04)”, maxWidth: 620, width: “100%”, margin: “0 auto” };
+const bs = (p, x) => ({ padding: “11px 24px”, borderRadius: 10, border: “none”, fontWeight: 600, fontSize: 14, cursor: “pointer”, background: p ? “#1e293b” : “#f1f5f9”, color: p ? “#fff” : “#475569”, transition: “all 0.2s”, display: “inline-flex”, alignItems: “center”, gap: 6, …(x || {}) });
+const ps = (a) => ({ padding: “8px 14px”, borderRadius: 8, border: “none”, fontWeight: 500, fontSize: 13, cursor: “pointer”, background: a ? “#1e293b” : “transparent”, color: a ? “#fff” : “#64748b”, transition: “all 0.2s” });
+
+function Icon({ size }) {
+return html`<svg width=${size||26} height=${size||26} viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
+}
+
 function App() {
 const [view, setView] = useState(“landing”);
-const [questions, setQuestions] = useState(() => DB.get(“fb_questions”, DEFAULTS.questions));
-const [submissions, setSubs] = useState(() => DB.get(“fb_submissions”, []));
-const [settings, setSettings] = useState(() => DB.get(“fb_settings”, DEFAULTS.settings));
-
+const [questions, setQuestions] = useState(() => DB.get(“fb_q”, DEFAULTS.questions));
+const [submissions, setSubs] = useState(() => DB.get(“fb_s”, []));
+const [settings, setSettings] = useState(() => DB.get(“fb_st”, DEFAULTS.settings));
 const [firstName, setFirst] = useState(””);
 const [surname, setSurname] = useState(””);
 const [email, setEmail] = useState(””);
 const [ratings, setRatings] = useState({});
 const [freeText, setFreeText] = useState(””);
 const [errors, setErrors] = useState({});
-
 const [adminAuth, setAuth] = useState(false);
 const [adminPass, setAdminPass] = useState(””);
 const [adminTab, setAdminTab] = useState(“dashboard”);
 const [editQ, setEditQ] = useState(null);
 const [newQ, setNewQ] = useState({ text: “”, category: “” });
 const [selectedSub, setSelectedSub] = useState(null);
-const [settingsForm, setSettingsForm] = useState(settings);
+const [sf, setSf] = useState(settings);
 const [toast, setToast] = useState(””);
 
-const saveQ = (q) => { setQuestions(q); DB.set(“fb_questions”, q); };
-const saveS = (s) => { setSubs(s); DB.set(“fb_submissions”, s); };
-const saveSt = (s) => { setSettings(s); DB.set(“fb_settings”, s); };
+const sq = (q) => { setQuestions(q); DB.set(“fb_q”, q); };
+const ss = (s) => { setSubs(s); DB.set(“fb_s”, s); };
+const sst = (s) => { setSettings(s); DB.set(“fb_st”, s); };
+const flash = (m) => { setToast(m); setTimeout(() => setToast(””), 2200); };
+const reset = () => { setFirst(””); setSurname(””); setEmail(””); setRatings({}); setFreeText(””); setErrors({}); };
 
-const flash = (msg) => { setToast(msg); setTimeout(() => setToast(””), 2200); };
-const resetForm = () => { setFirst(””); setSurname(””); setEmail(””); setRatings({}); setFreeText(””); setErrors({}); };
+const toastEl = toast ? html`<div style=${{ position: "fixed", bottom: 20, left: "50%", transform: "translateX(-50%)", background: "#1e293b", color: "#fff", padding: "10px 22px", borderRadius: 10, fontSize: 13, fontWeight: 500, zIndex: 999, animation: "fadeUp 0.3s ease" }}>${toast}</div>` : null;
+const wrap = (c) => html`<div style=${{ minHeight: "100vh", padding: "24px 14px" }}><div class="animate-in" style=${{ maxWidth: 660, margin: "0 auto" }}>${c}</div>${toastEl}</div>`;
 
-const card = { background: “#fff”, borderRadius: 16, padding: “28px 22px”, boxShadow: “0 1px 3px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.04)”, maxWidth: 620, width: “100%”, margin: “0 auto” };
-const btn = (primary, extra) => ({
-padding: “11px 24px”, borderRadius: 10, border: “none”, fontWeight: 600, fontSize: 14, cursor: “pointer”, fontFamily: “‘DM Sans’,sans-serif”,
-background: primary ? “#1e293b” : “#f1f5f9”, color: primary ? “#fff” : “#475569”, transition: “all 0.2s”, display: “inline-flex”, alignItems: “center”, gap: 6, …extra,
-});
-const pill = (active) => ({
-padding: “8px 14px”, borderRadius: 8, border: “none”, fontWeight: 500, fontSize: 13, cursor: “pointer”, fontFamily: “‘DM Sans’,sans-serif”,
-background: active ? “#1e293b” : “transparent”, color: active ? “#fff” : “#64748b”, transition: “all 0.2s”,
-});
+if (view === “landing”) return wrap(html`<div style=${{ textAlign: "center", paddingTop: 56 }}> <div style=${{ width: 52, height: 52, borderRadius: 14, background: "#1e293b", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 22px" }}><${Icon} /></div> <h1 style=${{ fontFamily: "'Playfair Display',serif", fontSize: 30, fontWeight: 700, color: "#0f172a", marginBottom: 10 }}>${settings.title}</h1> <p style=${{ color: "#64748b", fontSize: 15, maxWidth: 400, margin: "0 auto 32px", lineHeight: 1.6 }}>${settings.subtitle}</p> <button style=${bs(true)} onClick=${() => { reset(); setView("step1"); }}>Begin Feedback →</button> <p style=${{ marginTop: 44, fontSize: 12, color: "#94a3b8" }}><span style=${{ cursor: "pointer", textDecoration: "underline" }} onClick=${() => setView("admin")}>Admin Access</span></p> </div>`);
 
-const wrap = (children) => (
-<div style={{ minHeight: “100vh”, padding: “24px 14px” }}>
-<div className=“animate-in” style={{ maxWidth: 660, margin: “0 auto” }}>{children}</div>
-{toast && <div style={{ position: “fixed”, bottom: 20, left: “50%”, transform: “translateX(-50%)”, background: “#1e293b”, color: “#fff”, padding: “10px 22px”, borderRadius: 10, fontSize: 13, fontWeight: 500, zIndex: 999, animation: “fadeUp 0.3s ease” }}>{toast}</div>}
-</div>
-);
+if (view === “step1”) return wrap(html`<div style=${card}> <${Progress} step=${0} total=${3} /> <p style=${{ fontSize: 11, fontWeight: 600, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>Step 1 of 3</p> <h2 style=${{ fontFamily: "'Playfair Display',serif", fontSize: 22, color: "#0f172a", marginBottom: 22 }}>Your Details</h2> <${Field} label="First Name" value=${firstName} onInput=${e => setFirst(e.target.value)} placeholder="Jane" error=${errors.firstName} /> <${Field} label="Surname" value=${surname} onInput=${e => setSurname(e.target.value)} placeholder="Smith" error=${errors.surname} /> <${Field} label="Email Address" value=${email} onInput=${e => setEmail(e.target.value)} type="email" placeholder="jane@example.com" error=${errors.email} /> <div style=${{ display: "flex", justifyContent: "space-between", marginTop: 8 }}> <button style=${bs(false)} onClick=${() => setView("landing")}>← Back</button> <button style=${bs(true)} onClick=${() => { const e = {}; if (!firstName.trim()) e.firstName = "Required"; if (!surname.trim()) e.surname = "Required"; if (!email.trim()) e.email = "Required"; else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) e.email = "Invalid email"; setErrors(e); if (!Object.keys(e).length) setView("step2"); }}>Continue →</button> </div> </div>`);
 
-/* ── Landing ── */
-if (view === “landing”) return wrap(
-<div style={{ textAlign: “center”, paddingTop: 56 }}>
-<div style={{ width: 52, height: 52, borderRadius: 14, background: “#1e293b”, display: “flex”, alignItems: “center”, justifyContent: “center”, margin: “0 auto 22px” }}>
-<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+if (view === “step2”) return wrap(html` <div style=${card}> <${Progress} step=${1} total=${3} /> <p style=${{ fontSize: 11, fontWeight: 600, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>Step 2 of 3</p> <h2 style=${{ fontFamily: "'Playfair Display',serif", fontSize: 22, color: "#0f172a", marginBottom: 6 }}>Rate Your Experience</h2> <p style=${{ fontSize: 13, color: "#94a3b8", marginBottom: 24 }}>0 = worst · 10 = best</p> ${errors.ratings && html`<div style=${{ background: “#fef2f2”, color: “#dc2626”, padding: “10px 14px”, borderRadius: 8, fontSize: 13, marginBottom: 14 }}>${errors.ratings}</div>`} ${questions.map((q, i) => html`
+<div key=${q.id} style=${{ marginBottom: 24, paddingBottom: 24, borderBottom: i < questions.length - 1 ? “1px solid #f1f5f9” : “none” }}>
+<div style=${{ display: “flex”, gap: 6, marginBottom: 8 }}>
+<span style=${{ fontSize: 12, fontWeight: 700, color: “#94a3b8”, minWidth: 16 }}>${i + 1}.</span>
+<span style=${{ fontSize: 14, fontWeight: 500, color: “#1e293b”, lineHeight: 1.4 }}>${q.text}</span>
 </div>
-<h1 style={{ fontFamily: “‘Playfair Display’,serif”, fontSize: 30, fontWeight: 700, color: “#0f172a”, marginBottom: 10, lineHeight: 1.2 }}>{settings.title}</h1>
-<p style={{ color: “#64748b”, fontSize: 15, maxWidth: 400, margin: “0 auto 32px”, lineHeight: 1.6 }}>{settings.subtitle}</p>
-<button style={btn(true)} onClick={() => { resetForm(); setView(“step1”); }}>Begin Feedback →</button>
-<p style={{ marginTop: 44, fontSize: 12, color: “#94a3b8” }}>
-<span style={{ cursor: “pointer”, textDecoration: “underline” }} onClick={() => setView(“admin”)}>Admin Access</span>
-</p>
+${q.category && html`<span style=${{ fontSize: 10, background: "#f1f5f9", color: "#64748b", padding: "2px 7px", borderRadius: 4, marginLeft: 22, display: "inline-block", marginBottom: 6 }}>${q.category}</span>`}
+<div style=${{ marginLeft: 22, marginTop: 6 }}><${RatingScale} value=${ratings[q.id]} onChange=${v => setRatings({ …ratings, [q.id]: v })} /></div>
 </div>
-);
+`)} <div style=${{ display: "flex", justifyContent: "space-between", marginTop: 8 }}> <button style=${bs(false)} onClick=${() => setView("step1")}>← Back</button> <button style=${bs(true)} onClick=${() => { const un = questions.filter(q => ratings[q.id] === undefined).length; if (un) { setErrors({ ratings: "Please rate all " + un + " remaining question(s)" }); return; } setErrors({}); setView("step3"); }}>Continue →</button> </div> </div> `);
 
-/* ── Step 1 ── */
-if (view === “step1”) return wrap(
-<div style={card}>
-<Progress step={0} total={3} />
-<p style={{ fontSize: 11, fontWeight: 600, color: “#94a3b8”, textTransform: “uppercase”, letterSpacing: 1, marginBottom: 4 }}>Step 1 of 3</p>
-<h2 style={{ fontFamily: “‘Playfair Display’,serif”, fontSize: 22, color: “#0f172a”, marginBottom: 22 }}>Your Details</h2>
-<Field label="First Name" value={firstName} onChange={setFirst} placeholder="Jane" error={errors.firstName} />
-<Field label="Surname" value={surname} onChange={setSurname} placeholder="Smith" error={errors.surname} />
-<Field label="Email Address" value={email} onChange={setEmail} type="email" placeholder="jane@example.com" error={errors.email} />
-<div style={{ display: “flex”, justifyContent: “space-between”, marginTop: 8 }}>
-<button style={btn(false)} onClick={() => setView(“landing”)}>← Back</button>
-<button style={btn(true)} onClick={() => {
-const e = {};
-if (!firstName.trim()) e.firstName = “Required”;
-if (!surname.trim()) e.surname = “Required”;
-if (!email.trim()) e.email = “Required”;
-else if (!/^[^\s@]+@[^\s@]+.[^\s@]+$/.test(email)) e.email = “Invalid email”;
-setErrors(e);
-if (!Object.keys(e).length) setView(“step2”);
-}}>Continue →</button>
-</div>
-</div>
-);
-
-/* ── Step 2 ── */
-if (view === “step2”) return wrap(
-<div style={card}>
-<Progress step={1} total={3} />
-<p style={{ fontSize: 11, fontWeight: 600, color: “#94a3b8”, textTransform: “uppercase”, letterSpacing: 1, marginBottom: 4 }}>Step 2 of 3</p>
-<h2 style={{ fontFamily: “‘Playfair Display’,serif”, fontSize: 22, color: “#0f172a”, marginBottom: 6 }}>Rate Your Experience</h2>
-<p style={{ fontSize: 13, color: “#94a3b8”, marginBottom: 24 }}>0 = worst · 10 = best</p>
-{errors.ratings && <div style={{ background: “#fef2f2”, color: “#dc2626”, padding: “10px 14px”, borderRadius: 8, fontSize: 13, marginBottom: 14 }}>{errors.ratings}</div>}
-{questions.map((q, i) => (
-<div key={q.id} style={{ marginBottom: 24, paddingBottom: 24, borderBottom: i < questions.length - 1 ? “1px solid #f1f5f9” : “none” }}>
-<div style={{ display: “flex”, gap: 6, marginBottom: 8 }}>
-<span style={{ fontSize: 12, fontWeight: 700, color: “#94a3b8”, minWidth: 16 }}>{i + 1}.</span>
-<span style={{ fontSize: 14, fontWeight: 500, color: “#1e293b”, lineHeight: 1.4 }}>{q.text}</span>
-</div>
-{q.category && <span style={{ fontSize: 10, background: “#f1f5f9”, color: “#64748b”, padding: “2px 7px”, borderRadius: 4, marginLeft: 22, marginBottom: 6, display: “inline-block” }}>{q.category}</span>}
-<div style={{ marginLeft: 22, marginTop: 6 }}><RatingScale value={ratings[q.id]} onChange={v => setRatings({ …ratings, [q.id]: v })} /></div>
-</div>
-))}
-<div style={{ display: “flex”, justifyContent: “space-between”, marginTop: 8 }}>
-<button style={btn(false)} onClick={() => setView(“step1”)}>← Back</button>
-<button style={btn(true)} onClick={() => {
-const unanswered = questions.filter(q => ratings[q.id] === undefined).length;
-if (unanswered > 0) { setErrors({ ratings: `Please rate all ${unanswered} remaining question(s)` }); return; }
-setErrors({}); setView(“step3”);
-}}>Continue →</button>
-</div>
-</div>
-);
-
-/* ── Step 3 ── */
 if (view === “step3”) {
 const avg = (Object.values(ratings).reduce((a, b) => a + b, 0) / Math.max(Object.values(ratings).length, 1)).toFixed(1);
-return wrap(
-<div style={card}>
-<Progress step={2} total={3} />
-<p style={{ fontSize: 11, fontWeight: 600, color: “#94a3b8”, textTransform: “uppercase”, letterSpacing: 1, marginBottom: 4 }}>Step 3 of 3</p>
-<h2 style={{ fontFamily: “‘Playfair Display’,serif”, fontSize: 22, color: “#0f172a”, marginBottom: 6 }}>Additional Comments</h2>
-<p style={{ fontSize: 13, color: “#94a3b8”, marginBottom: 18 }}>Anything else you’d like us to know? (Optional)</p>
-<textarea value={freeText} onChange={e => setFreeText(e.target.value)} placeholder=“Share any additional thoughts, suggestions, or feedback…”
-rows={5} style={{ width: “100%”, padding: “12px”, borderRadius: 10, border: “1.5px solid #e2e8f0”, fontSize: 14, fontFamily: “‘DM Sans’,sans-serif”, resize: “vertical”, background: “#f8fafc”, lineHeight: 1.6 }} />
-<div style={{ background: “#f8fafc”, borderRadius: 10, padding: 14, marginTop: 18, border: “1px solid #e2e8f0” }}>
-<p style={{ fontSize: 11, fontWeight: 600, color: “#475569”, marginBottom: 6 }}>Review Summary</p>
-<p style={{ fontSize: 13, color: “#64748b” }}>{firstName} {surname} · {email}</p>
-<p style={{ fontSize: 13, color: “#64748b”, marginTop: 3 }}>{Object.keys(ratings).length} questions rated · Avg: {avg}/10</p>
-</div>
-<div style={{ display: “flex”, justifyContent: “space-between”, marginTop: 22 }}>
-<button style={btn(false)} onClick={() => setView(“step2”)}>← Back</button>
-<button style={btn(true, { background: “#059669” })} onClick={() => {
-const sub = { id: “s” + Date.now(), firstName: firstName.trim(), surname: surname.trim(), email: email.trim(), ratings: { …ratings }, freeText: freeText.trim(), timestamp: new Date().toISOString(), questionSnapshot: questions.map(q => ({ id: q.id, text: q.text, category: q.category })) };
-saveS([sub, …submissions]); setView(“thankyou”);
-}}>Submit Feedback ✓</button>
-</div>
-</div>
-);
+return wrap(html`<div style=${card}> <${Progress} step=${2} total=${3} /> <p style=${{ fontSize: 11, fontWeight: 600, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>Step 3 of 3</p> <h2 style=${{ fontFamily: "'Playfair Display',serif", fontSize: 22, color: "#0f172a", marginBottom: 6 }}>Additional Comments</h2> <p style=${{ fontSize: 13, color: "#94a3b8", marginBottom: 18 }}>Anything else you'd like us to know? (Optional)</p> <textarea value=${freeText} onInput=${e => setFreeText(e.target.value)} placeholder="Share any additional thoughts, suggestions, or feedback..." rows="5" style=${{ width: "100%", padding: "12px", borderRadius: 10, border: "1.5px solid #e2e8f0", fontSize: 14, resize: "vertical", background: "#f8fafc", lineHeight: 1.6 }}></textarea> <div style=${{ background: "#f8fafc", borderRadius: 10, padding: 14, marginTop: 18, border: "1px solid #e2e8f0" }}> <p style=${{ fontSize: 11, fontWeight: 600, color: "#475569", marginBottom: 6 }}>Review Summary</p> <p style=${{ fontSize: 13, color: "#64748b" }}>${firstName} ${surname} · ${email}</p> <p style=${{ fontSize: 13, color: "#64748b", marginTop: 3 }}>${Object.keys(ratings).length} questions rated · Avg: ${avg}/10</p> </div> <div style=${{ display: "flex", justifyContent: "space-between", marginTop: 22 }}> <button style=${bs(false)} onClick=${() => setView("step2")}>← Back</button> <button style=${bs(true, { background: "#059669" })} onClick=${() => { const sub = { id: "s" + Date.now(), firstName: firstName.trim(), surname: surname.trim(), email: email.trim(), ratings: { ...ratings }, freeText: freeText.trim(), timestamp: new Date().toISOString(), questionSnapshot: questions.map(q => ({ id: q.id, text: q.text, category: q.category })) }; ss([sub, ...submissions]); setView("thankyou"); }}>Submit Feedback ✓</button> </div> </div>`);
 }
 
-/* ── Thank You ── */
-if (view === “thankyou”) return wrap(
-<div style={{ …card, textAlign: “center”, padding: “44px 22px” }}>
-<div style={{ width: 60, height: 60, borderRadius: “50%”, background: “#d1fae5”, display: “flex”, alignItems: “center”, justifyContent: “center”, margin: “0 auto 18px”, fontSize: 26 }}>✓</div>
-<h2 style={{ fontFamily: “‘Playfair Display’,serif”, fontSize: 24, color: “#0f172a”, marginBottom: 10 }}>Thank You!</h2>
-<p style={{ color: “#64748b”, fontSize: 14, maxWidth: 360, margin: “0 auto 28px”, lineHeight: 1.6 }}>{settings.thankYouMessage}</p>
-<button style={btn(true)} onClick={() => { resetForm(); setView(“landing”); }}>Done</button>
-</div>
-);
+if (view === “thankyou”) return wrap(html`<div style=${{ ...card, textAlign: "center", padding: "44px 22px" }}> <div style=${{ width: 60, height: 60, borderRadius: "50%", background: "#d1fae5", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 18px", fontSize: 26 }}>✓</div> <h2 style=${{ fontFamily: "'Playfair Display',serif", fontSize: 24, color: "#0f172a", marginBottom: 10 }}>Thank You!</h2> <p style=${{ color: "#64748b", fontSize: 14, maxWidth: 360, margin: "0 auto 28px", lineHeight: 1.6 }}>${settings.thankYouMessage}</p> <button style=${bs(true)} onClick=${() => { reset(); setView("landing"); }}>Done</button> </div>`);
 
-/* ── Admin Login ── */
-if (view === “admin” && !adminAuth) return wrap(
-<div style={{ …card, maxWidth: 380 }}>
-<h2 style={{ fontFamily: “‘Playfair Display’,serif”, fontSize: 20, color: “#0f172a”, marginBottom: 18, textAlign: “center” }}>Admin Access</h2>
-<Field label="Password" value={adminPass} onChange={setAdminPass} type="password" placeholder="Enter admin password" error={errors.admin} />
-<div style={{ display: “flex”, gap: 8 }}>
-<button style={btn(false)} onClick={() => { setView(“landing”); setAdminPass(””); setErrors({}); }}>← Back</button>
-<button style={btn(true, { flex: 1 })} onClick={() => {
-if (adminPass === settings.adminPass) { setAuth(true); setAdminPass(””); setErrors({}); }
-else setErrors({ admin: “Incorrect password” });
-}}>Sign In</button>
-</div>
-</div>
-);
+if (view === “admin” && !adminAuth) return wrap(html`<div style=${{ ...card, maxWidth: 380 }}> <h2 style=${{ fontFamily: "'Playfair Display',serif", fontSize: 20, color: "#0f172a", marginBottom: 18, textAlign: "center" }}>Admin Access</h2> <${Field} label="Password" value=${adminPass} onInput=${e => setAdminPass(e.target.value)} type="password" placeholder="Enter admin password" error=${errors.admin} /> <div style=${{ display: "flex", gap: 8 }}> <button style=${bs(false)} onClick=${() => { setView("landing"); setAdminPass(""); setErrors({}); }}>← Back</button> <button style=${bs(true, { flex: 1 })} onClick=${() => { if (adminPass === settings.adminPass) { setAuth(true); setAdminPass(""); setErrors({}); } else setErrors({ admin: "Incorrect password" }); }}>Sign In</button> </div> </div>`);
 
-/* ── Admin Panel ── */
 if (view === “admin” && adminAuth) {
-const avgRating = submissions.length > 0
-? (submissions.reduce((sum, s) => sum + Object.values(s.ratings).reduce((a, b) => a + b, 0) / Math.max(Object.values(s.ratings).length, 1), 0) / submissions.length).toFixed(1)
-: “—”;
-const qAvgs = questions.map(q => {
-const vals = submissions.map(s => s.ratings[q.id]).filter(v => v !== undefined);
-return { …q, avg: vals.length > 0 ? (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1) : “—”, count: vals.length };
-});
+const ar = submissions.length > 0 ? (submissions.reduce((s2, s3) => s2 + Object.values(s3.ratings).reduce((a, b) => a + b, 0) / Math.max(Object.values(s3.ratings).length, 1), 0) / submissions.length).toFixed(1) : “—”;
+const qa = questions.map(q => { const v = submissions.map(s => s.ratings[q.id]).filter(x => x !== undefined); return { …q, avg: v.length ? (v.reduce((a, b) => a + b, 0) / v.length).toFixed(1) : “—”, count: v.length }; });
+const wc = submissions.filter(s => new Date(s.timestamp) > new Date(Date.now() - 7*864e5)).length;
 
 ```
 const exportCSV = () => {
-  if (!submissions.length) { flash("No data to export"); return; }
-  const allQIds = [...new Set(submissions.flatMap(s => Object.keys(s.ratings)))];
-  const qMap = {}; submissions.forEach(s => (s.questionSnapshot || []).forEach(q => { qMap[q.id] = q.text; }));
-  const headers = ["Date","First Name","Surname","Email", ...allQIds.map(id => qMap[id] || id), "Comments"];
-  const rows = submissions.map(s => [
-    new Date(s.timestamp).toLocaleDateString(), s.firstName, s.surname, s.email,
-    ...allQIds.map(id => s.ratings[id] ?? ""), '"' + (s.freeText || "").replace(/"/g, '""') + '"',
-  ]);
-  const csv = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
-  const blob = new Blob([csv], { type: "text/csv" });
-  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
-  a.download = "feedback_" + new Date().toISOString().slice(0, 10) + ".csv";
-  a.click(); URL.revokeObjectURL(a.href); flash("CSV exported!");
+  if (!submissions.length) { flash("No data"); return; }
+  const ids = [...new Set(submissions.flatMap(s => Object.keys(s.ratings)))];
+  const qm = {}; submissions.forEach(s => (s.questionSnapshot || []).forEach(q => { qm[q.id] = q.text; }));
+  const hd = ["Date","First Name","Surname","Email",...ids.map(id => qm[id]||id),"Comments"];
+  const rows = submissions.map(s => [new Date(s.timestamp).toLocaleDateString(),s.firstName,s.surname,s.email,...ids.map(id => s.ratings[id] !== undefined ? s.ratings[id] : ""),'"'+(s.freeText||"").replace(/"/g,'""')+'"']);
+  const csv = [hd.join(","),...rows.map(r => r.join(","))].join("\n");
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
+  a.download = "feedback_"+new Date().toISOString().slice(0,10)+".csv"; a.click(); flash("CSV exported!");
 };
 
-return (
-  <div style={{ minHeight: "100vh", padding: 0 }}>
-    {/* Header */}
-    <div style={{ background: "#fff", borderBottom: "1px solid #e2e8f0", padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, zIndex: 10 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <div style={{ width: 30, height: 30, borderRadius: 8, background: "#1e293b", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-        </div>
-        <span style={{ fontWeight: 700, color: "#0f172a", fontSize: 14 }}>Admin</span>
+return html`
+  <div style=${{ minHeight: "100vh" }}>
+    <div style=${{ background: "#fff", borderBottom: "1px solid #e2e8f0", padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, zIndex: 10 }}>
+      <div style=${{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style=${{ width: 30, height: 30, borderRadius: 8, background: "#1e293b", display: "flex", alignItems: "center", justifyContent: "center" }}><${Icon} size=${14} /></div>
+        <span style=${{ fontWeight: 700, color: "#0f172a", fontSize: 14 }}>Admin</span>
       </div>
-      <div style={{ display: "flex", gap: 6 }}>
-        <button style={btn(false, { padding: "6px 12px", fontSize: 11 })} onClick={() => setView("landing")}>View Site</button>
-        <button style={btn(false, { padding: "6px 12px", fontSize: 11, color: "#ef4444" })} onClick={() => { setAuth(false); setView("landing"); }}>Sign Out</button>
+      <div style=${{ display: "flex", gap: 6 }}>
+        <button style=${bs(false, { padding: "6px 12px", fontSize: 11 })} onClick=${() => setView("landing")}>View Site</button>
+        <button style=${bs(false, { padding: "6px 12px", fontSize: 11, color: "#ef4444" })} onClick=${() => { setAuth(false); setView("landing"); }}>Sign Out</button>
       </div>
     </div>
-
-    <div className="animate-in" style={{ padding: "16px 14px", maxWidth: 880, margin: "0 auto" }}>
-      {/* Tabs */}
-      <div style={{ display: "flex", gap: 3, background: "#fff", borderRadius: 10, padding: 3, marginBottom: 20, boxShadow: "0 1px 3px rgba(0,0,0,0.04)", overflowX: "auto" }}>
-        {[["dashboard","Dashboard"],["questions","Questions"],["submissions","Responses"],["settings","Settings"]].map(([k,l]) => (
-          <button key={k} style={pill(adminTab === k)} onClick={() => setAdminTab(k)}>{l}</button>
-        ))}
+    <div class="animate-in" style=${{ padding: "16px 14px", maxWidth: 880, margin: "0 auto" }}>
+      <div style=${{ display: "flex", gap: 3, background: "#fff", borderRadius: 10, padding: 3, marginBottom: 20, boxShadow: "0 1px 3px rgba(0,0,0,0.04)", overflowX: "auto" }}>
+        ${[["dashboard","Dashboard"],["questions","Questions"],["submissions","Responses"],["settings","Settings"]].map(([k,l]) => html`<button key=${k} style=${ps(adminTab===k)} onClick=${() => setAdminTab(k)}>${l}</button>`)}
       </div>
 
-      {/* Dashboard */}
-      {adminTab === "dashboard" && (
-        <div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, marginBottom: 24 }}>
-            {[
-              { label: "Responses", value: submissions.length, color: "#3b82f6" },
-              { label: "Avg Rating", value: avgRating, color: "#10b981" },
-              { label: "Questions", value: questions.length, color: "#8b5cf6" },
-              { label: "This Week", value: submissions.filter(s => new Date(s.timestamp) > new Date(Date.now() - 7*864e5)).length, color: "#f59e0b" },
-            ].map(s => (
-              <div key={s.label} style={{ background: "#fff", borderRadius: 12, padding: "16px 14px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-                <p style={{ fontSize: 10, fontWeight: 600, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>{s.label}</p>
-                <p style={{ fontSize: 26, fontWeight: 700, color: s.color }}>{s.value}</p>
-              </div>
-            ))}
-          </div>
-          <div style={{ background: "#fff", borderRadius: 12, padding: 18, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-            <h3 style={{ fontSize: 13, fontWeight: 600, color: "#0f172a", marginBottom: 14 }}>Question Performance</h3>
-            {qAvgs.map(q => (
-              <div key={q.id} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, paddingBottom: 10, borderBottom: "1px solid #f8fafc" }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: 12, color: "#334155", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{q.text}</p>
-                  <p style={{ fontSize: 10, color: "#94a3b8", marginTop: 1 }}>{q.count} responses</p>
-                </div>
-                <div style={{ width: 80, height: 5, borderRadius: 3, background: "#f1f5f9", flexShrink: 0 }}>
-                  <div style={{ width: q.avg !== "—" ? `${(parseFloat(q.avg)/10)*100}%` : "0%", height: "100%", borderRadius: 3, background: parseFloat(q.avg) >= 7 ? "#10b981" : parseFloat(q.avg) >= 4 ? "#f59e0b" : "#ef4444", transition: "width 0.6s" }} />
-                </div>
-                <span style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", minWidth: 28, textAlign: "right" }}>{q.avg}</span>
-              </div>
-            ))}
-            {qAvgs.length === 0 && <p style={{ color: "#94a3b8", fontSize: 13 }}>Add questions to see performance data.</p>}
-          </div>
+      ${adminTab === "dashboard" && html`<div>
+        <div style=${{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, marginBottom: 24 }}>
+          ${[{l:"Responses",v:submissions.length,c:"#3b82f6"},{l:"Avg Rating",v:ar,c:"#10b981"},{l:"Questions",v:questions.length,c:"#8b5cf6"},{l:"This Week",v:wc,c:"#f59e0b"}].map(s => html`
+            <div key=${s.l} style=${{ background: "#fff", borderRadius: 12, padding: "16px 14px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+              <p style=${{ fontSize: 10, fontWeight: 600, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>${s.l}</p>
+              <p style=${{ fontSize: 26, fontWeight: 700, color: s.c }}>${s.v}</p>
+            </div>`)}
         </div>
-      )}
+        <div style=${{ background: "#fff", borderRadius: 12, padding: 18, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+          <h3 style=${{ fontSize: 13, fontWeight: 600, color: "#0f172a", marginBottom: 14 }}>Question Performance</h3>
+          ${qa.map(q => html`<div key=${q.id} style=${{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, paddingBottom: 10, borderBottom: "1px solid #f8fafc" }}>
+            <div style=${{ flex: 1, minWidth: 0 }}><p style=${{ fontSize: 12, color: "#334155", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>${q.text}</p><p style=${{ fontSize: 10, color: "#94a3b8", marginTop: 1 }}>${q.count} responses</p></div>
+            <div style=${{ width: 80, height: 5, borderRadius: 3, background: "#f1f5f9", flexShrink: 0 }}><div style=${{ width: q.avg !== "—" ? ((parseFloat(q.avg)/10)*100)+"%" : "0%", height: "100%", borderRadius: 3, background: parseFloat(q.avg) >= 7 ? "#10b981" : parseFloat(q.avg) >= 4 ? "#f59e0b" : "#ef4444", transition: "width 0.6s" }} /></div>
+            <span style=${{ fontSize: 13, fontWeight: 700, color: "#0f172a", minWidth: 28, textAlign: "right" }}>${q.avg}</span>
+          </div>`)}
+        </div>
+      </div>`}
 
-      {/* Questions */}
-      {adminTab === "questions" && (
-        <div>
-          <div style={{ background: "#fff", borderRadius: 12, padding: 18, marginBottom: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-            <h3 style={{ fontSize: 13, fontWeight: 600, color: "#0f172a", marginBottom: 14 }}>Add New Question</h3>
-            <input value={newQ.text} onChange={e => setNewQ({ ...newQ, text: e.target.value })} placeholder="Question text..."
-              style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 13, fontFamily: "'DM Sans',sans-serif", marginBottom: 8 }} />
-            <div style={{ display: "flex", gap: 8 }}>
-              <input value={newQ.category} onChange={e => setNewQ({ ...newQ, category: e.target.value })} placeholder="Category (optional)"
-                style={{ flex: 1, padding: "10px 12px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 13, fontFamily: "'DM Sans',sans-serif" }} />
-              <button style={btn(true, { padding: "10px 18px" })} onClick={() => {
-                if (!newQ.text.trim()) return;
-                saveQ([...questions, { id: "q" + Date.now(), text: newQ.text.trim(), category: newQ.category.trim() || "General" }]);
-                setNewQ({ text: "", category: "" }); flash("Question added");
-              }}>+ Add</button>
-            </div>
+      ${adminTab === "questions" && html`<div>
+        <div style=${{ background: "#fff", borderRadius: 12, padding: 18, marginBottom: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+          <h3 style=${{ fontSize: 13, fontWeight: 600, color: "#0f172a", marginBottom: 14 }}>Add New Question</h3>
+          <input value=${newQ.text} onInput=${e => setNewQ({...newQ, text: e.target.value})} placeholder="Question text..." style=${{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 13, marginBottom: 8 }} />
+          <div style=${{ display: "flex", gap: 8 }}>
+            <input value=${newQ.category} onInput=${e => setNewQ({...newQ, category: e.target.value})} placeholder="Category" style=${{ flex: 1, padding: "10px 12px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 13 }} />
+            <button style=${bs(true, { padding: "10px 18px" })} onClick=${() => { if (!newQ.text.trim()) return; sq([...questions, { id: "q"+Date.now(), text: newQ.text.trim(), category: newQ.category.trim()||"General" }]); setNewQ({text:"",category:""}); flash("Added"); }}>+ Add</button>
           </div>
-          <div style={{ background: "#fff", borderRadius: 12, padding: 18, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-            <h3 style={{ fontSize: 13, fontWeight: 600, color: "#0f172a", marginBottom: 14 }}>Current Questions ({questions.length})</h3>
-            {questions.length === 0 && <p style={{ color: "#94a3b8", fontSize: 13 }}>No questions yet.</p>}
-            {questions.map((q, i) => (
-              <div key={q.id} style={{ padding: "10px 0", borderBottom: i < questions.length - 1 ? "1px solid #f1f5f9" : "none" }}>
-                {editQ?.id === q.id ? (
-                  <div>
-                    <input value={editQ.text} onChange={e => setEditQ({ ...editQ, text: e.target.value })}
-                      style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1.5px solid #1e293b", fontSize: 13, fontFamily: "'DM Sans',sans-serif", marginBottom: 6 }} />
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <input value={editQ.category} onChange={e => setEditQ({ ...editQ, category: e.target.value })}
-                        style={{ flex: 1, padding: "8px 10px", borderRadius: 6, border: "1.5px solid #1e293b", fontSize: 13, fontFamily: "'DM Sans',sans-serif" }} />
-                      <button style={btn(true, { padding: "6px 14px", fontSize: 12 })} onClick={() => {
-                        saveQ(questions.map(x => x.id === editQ.id ? editQ : x)); setEditQ(null); flash("Question updated");
-                      }}>Save</button>
-                      <button style={btn(false, { padding: "6px 14px", fontSize: 12 })} onClick={() => setEditQ(null)}>Cancel</button>
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: "#cbd5e1", minWidth: 16 }}>{i + 1}</span>
-                    <span style={{ flex: 1, fontSize: 13, color: "#334155" }}>{q.text}</span>
-                    <span style={{ fontSize: 10, background: "#f1f5f9", color: "#64748b", padding: "2px 7px", borderRadius: 4 }}>{q.category}</span>
-                    <button style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: "#64748b", padding: "4px 6px" }} onClick={() => setEditQ({ ...q })}>Edit</button>
-                    <button style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: "#ef4444", padding: "4px 6px" }} onClick={() => { saveQ(questions.filter(x => x.id !== q.id)); flash("Question deleted"); }}>Delete</button>
-                  </div>
-                )}
+        </div>
+        <div style=${{ background: "#fff", borderRadius: 12, padding: 18, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+          <h3 style=${{ fontSize: 13, fontWeight: 600, color: "#0f172a", marginBottom: 14 }}>Current Questions (${questions.length})</h3>
+          ${questions.map((q, i) => html`<div key=${q.id} style=${{ padding: "10px 0", borderBottom: i < questions.length-1 ? "1px solid #f1f5f9" : "none" }}>
+            ${editQ && editQ.id === q.id ? html`<div>
+              <input value=${editQ.text} onInput=${e => setEditQ({...editQ, text: e.target.value})} style=${{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1.5px solid #1e293b", fontSize: 13, marginBottom: 6 }} />
+              <div style=${{ display: "flex", gap: 6 }}>
+                <input value=${editQ.category} onInput=${e => setEditQ({...editQ, category: e.target.value})} style=${{ flex: 1, padding: "8px 10px", borderRadius: 6, border: "1.5px solid #1e293b", fontSize: 13 }} />
+                <button style=${bs(true, { padding: "6px 14px", fontSize: 12 })} onClick=${() => { sq(questions.map(x => x.id===editQ.id ? editQ : x)); setEditQ(null); flash("Saved"); }}>Save</button>
+                <button style=${bs(false, { padding: "6px 14px", fontSize: 12 })} onClick=${() => setEditQ(null)}>Cancel</button>
               </div>
-            ))}
+            </div>` : html`<div style=${{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style=${{ fontSize: 11, fontWeight: 700, color: "#cbd5e1", minWidth: 16 }}>${i+1}</span>
+              <span style=${{ flex: 1, fontSize: 13, color: "#334155", minWidth: 120 }}>${q.text}</span>
+              <span style=${{ fontSize: 10, background: "#f1f5f9", color: "#64748b", padding: "2px 7px", borderRadius: 4 }}>${q.category}</span>
+              <button style=${{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: "#64748b", padding: "4px 6px" }} onClick=${() => setEditQ({...q})}>Edit</button>
+              <button style=${{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: "#ef4444", padding: "4px 6px" }} onClick=${() => { sq(questions.filter(x => x.id !== q.id)); flash("Deleted"); }}>Delete</button>
+            </div>`}
+          </div>`)}
+        </div>
+      </div>`}
+
+      ${adminTab === "submissions" && html`<div>
+        <div style=${{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
+          <h3 style=${{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>Responses (${submissions.length})</h3>
+          <div style=${{ display: "flex", gap: 6 }}>
+            <button style=${bs(false, { padding: "7px 12px", fontSize: 11 })} onClick=${exportCSV}>Export CSV</button>
+            <button style=${bs(false, { padding: "7px 12px", fontSize: 11, color: "#ef4444" })} onClick=${() => { ss([]); setSelectedSub(null); flash("Cleared"); }}>Clear All</button>
           </div>
         </div>
-      )}
-
-      {/* Submissions */}
-      {adminTab === "submissions" && (
-        <div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
-            <h3 style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>Responses ({submissions.length})</h3>
-            <div style={{ display: "flex", gap: 6 }}>
-              <button style={btn(false, { padding: "7px 12px", fontSize: 11 })} onClick={exportCSV}>Export CSV</button>
-              <button style={btn(false, { padding: "7px 12px", fontSize: 11, color: "#ef4444" })} onClick={() => { saveS([]); setSelectedSub(null); flash("All responses cleared"); }}>Clear All</button>
+        ${!submissions.length && html`<div style=${{ background: "#fff", borderRadius: 12, padding: 36, textAlign: "center", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}><p style=${{ color: "#94a3b8", fontSize: 13 }}>No responses yet.</p></div>`}
+        ${submissions.map(s => {
+          const sa = (Object.values(s.ratings).reduce((a,b) => a+b, 0) / Math.max(Object.values(s.ratings).length, 1)).toFixed(1);
+          const op = selectedSub && selectedSub.id === s.id;
+          return html`<div key=${s.id} style=${{ background: "#fff", borderRadius: 12, padding: "14px 16px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", cursor: "pointer", border: op ? "2px solid #1e293b" : "2px solid transparent", transition: "border 0.2s", marginBottom: 8 }} onClick=${() => setSelectedSub(op ? null : s)}>
+            <div style=${{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div><p style=${{ fontSize: 14, fontWeight: 600, color: "#0f172a" }}>${s.firstName} ${s.surname}</p><p style=${{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>${s.email}</p></div>
+              <div style=${{ textAlign: "right" }}><p style=${{ fontSize: 11, color: "#94a3b8" }}>${new Date(s.timestamp).toLocaleDateString()}</p><p style=${{ fontSize: 13, fontWeight: 700, color: "#10b981", marginTop: 2 }}>Avg: ${sa}</p></div>
             </div>
-          </div>
-          {submissions.length === 0 && (
-            <div style={{ background: "#fff", borderRadius: 12, padding: 36, textAlign: "center", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-              <p style={{ color: "#94a3b8", fontSize: 13 }}>No responses yet.</p>
-            </div>
-          )}
-          {submissions.map(s => {
-            const sAvg = (Object.values(s.ratings).reduce((a, b) => a + b, 0) / Math.max(Object.values(s.ratings).length, 1)).toFixed(1);
-            const open = selectedSub?.id === s.id;
-            return (
-              <div key={s.id} style={{ background: "#fff", borderRadius: 12, padding: "14px 16px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", cursor: "pointer", border: open ? "2px solid #1e293b" : "2px solid transparent", transition: "border 0.2s", marginBottom: 8 }}
-                onClick={() => setSelectedSub(open ? null : s)}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div>
-                    <p style={{ fontSize: 14, fontWeight: 600, color: "#0f172a" }}>{s.firstName} {s.surname}</p>
-                    <p style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>{s.email}</p>
-                  </div>
-                  <div style={{ textAlign: "right" }}>
-                    <p style={{ fontSize: 11, color: "#94a3b8" }}>{new Date(s.timestamp).toLocaleDateString()}</p>
-                    <p style={{ fontSize: 13, fontWeight: 700, color: "#10b981", marginTop: 2 }}>Avg: {sAvg}</p>
-                  </div>
-                </div>
-                {open && (
-                  <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid #f1f5f9" }}>
-                    {(s.questionSnapshot || []).map(q => (
-                      <div key={q.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7 }}>
-                        <span style={{ fontSize: 12, color: "#475569", flex: 1 }}>{q.text}</span>
-                        <span style={{ fontSize: 12, fontWeight: 700, minWidth: 24, textAlign: "center", padding: "2px 7px", borderRadius: 5,
-                          background: (s.ratings[q.id]??0) >= 7 ? "#d1fae5" : (s.ratings[q.id]??0) >= 4 ? "#fef9c3" : "#fee2e2",
-                          color: (s.ratings[q.id]??0) >= 7 ? "#059669" : (s.ratings[q.id]??0) >= 4 ? "#ca8a04" : "#dc2626",
-                        }}>{s.ratings[q.id] ?? "—"}</span>
-                      </div>
-                    ))}
-                    {s.freeText && (
-                      <div style={{ marginTop: 10, padding: 10, background: "#f8fafc", borderRadius: 8, border: "1px solid #e2e8f0" }}>
-                        <p style={{ fontSize: 10, fontWeight: 600, color: "#94a3b8", marginBottom: 3 }}>Comments</p>
-                        <p style={{ fontSize: 12, color: "#334155", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{s.freeText}</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
+            ${op && html`<div style=${{ marginTop: 14, paddingTop: 14, borderTop: "1px solid #f1f5f9" }}>
+              ${(s.questionSnapshot||[]).map(q => html`<div key=${q.id} style=${{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7 }}>
+                <span style=${{ fontSize: 12, color: "#475569", flex: 1 }}>${q.text}</span>
+                <span style=${{ fontSize: 12, fontWeight: 700, minWidth: 24, textAlign: "center", padding: "2px 7px", borderRadius: 5, background: (s.ratings[q.id]||0) >= 7 ? "#d1fae5" : (s.ratings[q.id]||0) >= 4 ? "#fef9c3" : "#fee2e2", color: (s.ratings[q.id]||0) >= 7 ? "#059669" : (s.ratings[q.id]||0) >= 4 ? "#ca8a04" : "#dc2626" }}>${s.ratings[q.id] !== undefined ? s.ratings[q.id] : "—"}</span>
+              </div>`)}
+              ${s.freeText && html`<div style=${{ marginTop: 10, padding: 10, background: "#f8fafc", borderRadius: 8, border: "1px solid #e2e8f0" }}>
+                <p style=${{ fontSize: 10, fontWeight: 600, color: "#94a3b8", marginBottom: 3 }}>Comments</p>
+                <p style=${{ fontSize: 12, color: "#334155", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>${s.freeText}</p>
+              </div>`}
+            </div>`}
+          </div>`;
+        })}
+      </div>`}
 
-      {/* Settings */}
-      {adminTab === "settings" && (
-        <div style={{ background: "#fff", borderRadius: 12, padding: 20, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-          <h3 style={{ fontSize: 13, fontWeight: 600, color: "#0f172a", marginBottom: 18 }}>Site Settings</h3>
-          <Field label="Page Title" value={settingsForm.title || ""} onChange={v => setSettingsForm({ ...settingsForm, title: v })} />
-          <Field label="Subtitle" value={settingsForm.subtitle || ""} onChange={v => setSettingsForm({ ...settingsForm, subtitle: v })} />
-          <Field label="Thank You Message" value={settingsForm.thankYouMessage || ""} onChange={v => setSettingsForm({ ...settingsForm, thankYouMessage: v })} />
-          <Field label="Admin Password" value={settingsForm.adminPass || ""} onChange={v => setSettingsForm({ ...settingsForm, adminPass: v })} type="password" />
-          <button style={btn(true)} onClick={() => { saveSt(settingsForm); flash("Settings saved"); }}>Save Settings</button>
+      ${adminTab === "settings" && html`
+        <div style=${{ background: "#fff", borderRadius: 12, padding: 20, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+          <h3 style=${{ fontSize: 13, fontWeight: 600, color: "#0f172a", marginBottom: 18 }}>Site Settings</h3>
+          <${Field} label="Page Title" value=${sf.title||""} onInput=${e => setSf({...sf, title: e.target.value})} />
+          <${Field} label="Subtitle" value=${sf.subtitle||""} onInput=${e => setSf({...sf, subtitle: e.target.value})} />
+          <${Field} label="Thank You Message" value=${sf.thankYouMessage||""} onInput=${e => setSf({...sf, thankYouMessage: e.target.value})} />
+          <${Field} label="Admin Password" value=${sf.adminPass||""} onInput=${e => setSf({...sf, adminPass: e.target.value})} type="password" />
+          <button style=${bs(true)} onClick=${() => { sst(sf); flash("Settings saved"); }}>Save Settings</button>
         </div>
-      )}
+      `}
     </div>
-    {toast && <div style={{ position: "fixed", bottom: 20, left: "50%", transform: "translateX(-50%)", background: "#1e293b", color: "#fff", padding: "10px 22px", borderRadius: 10, fontSize: 13, fontWeight: 500, zIndex: 999, animation: "fadeUp 0.3s ease" }}>{toast}</div>}
+    ${toastEl}
   </div>
-);
+`;
 ```
 
 }
-
 return null;
 }
 
-ReactDOM.createRoot(document.getElementById(“root”)).render(<App />);
+render(html`<${App} />`, document.getElementById(“root”));
 </script>
 
 </body>
